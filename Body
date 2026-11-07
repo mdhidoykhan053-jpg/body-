@@ -1,0 +1,105 @@
+{
+  "name": "telegram-trading-bot",
+  "version": "1.0.0",
+  "description": "Telegram Bot & License Verification System",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.61.0"
+  }
+}
+const TelegramBot = require('node-telegram-bot-api');
+
+// BotFather থেকে পাওয়া আপনার বটের টোকেন এখানে বসাবেন
+const TOKEN = 'YOUR_BOT_TOKEN_HERE';
+const bot = new TelegramBot(TOKEN, { polling: true });
+
+// লাইসেন্স স্টোর করার মেমোরি ম্যাপ
+const licenses = new Map();
+
+// র‍্যান্ডম লাইসেন্স কি জেনারেটর
+function generateLicenseKey() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let key = 'CB-KEY-';
+    for (let i = 0; i < 8; i++) {
+        key += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return key;
+}
+
+// /start কমান্ড
+bot.onText(/\/start/, (msg) => {
+    const chatId = msg.chat.id;
+    const name = msg.from.first_name || 'ইউজার';
+    bot.sendMessage(chatId, `স্বাগতম, ${name}! 🚀\n\nপ্রিমিয়াম টুলের লাইসেন্স কি পেতে নিচের কমান্ড পাঠান:\n👉 /getkey`);
+});
+
+// /getkey কমান্ড
+bot.onText(/\/getkey/, (msg) => {
+    const chatId = msg.chat.id;
+    
+    if (licenses.has(chatId)) {
+        const existingKey = licenses.get(chatId);
+        bot.sendMessage(chatId, `আপনার ইতিমধ্যে একটি সক্রিয় লাইসেন্স কি আছে:\n\n\`${existingKey}\``, { parse_mode: 'Markdown' });
+        return;
+    }
+
+    const newKey = generateLicenseKey();
+    licenses.set(chatId, newKey);
+
+    bot.sendMessage(chatId, `✅ আপনার নতুন লাইসেন্স কি:\n\n\`${newKey}\`\n\nএটি বুকমার্কলেট টুলে ব্যবহার করুন।`, { parse_mode: 'Markdown' });
+});
+
+console.log('টেলিগ্রাম বট সফলভাবে চালু হয়েছে...');// ডেমো লাইসেন্স ডাটাবেজ
+const validLicenses = {
+    "CB-KEY-DEMO1234": { active: true }
+};
+
+module.exports = (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET');
+
+    const userKey = req.query.key;
+
+    if (!userKey || !validLicenses[userKey] || !validLicenses[userKey].active) {
+        res.setHeader('Content-Type', 'application/javascript');
+        return res.send(`alert('ত্রুটি: ভুল বা মেয়াদোত্তীর্ণ লাইসেন্স কি!');`);
+    }
+
+    const tradingEngineCode = `
+        (function() {
+            if (window.__TRADING_TOOL_ACTIVATED__) {
+                const rootEl = document.getElementById('trading-tool-root');
+                if (rootEl) {
+                    rootEl.style.display = (rootEl.style.display === 'none' ? 'block' : 'none');
+                }
+                return;
+            }
+
+            window.__TRADING_TOOL_ACTIVATED__ = true;
+
+            const container = document.createElement('div');
+            container.id = 'trading-tool-root';
+            container.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 999999; background: #1a1a1a; color: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); font-family: Arial, sans-serif; width: 300px;';
+            
+            container.innerHTML = \`
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 15px;">
+                    <h3 style="margin: 0; font-size: 16px; color: #00ffcc;">প্রিমিয়াম ট্রেডিং টুল</h3>
+                    <button id="close-tool-btn" style="background: #ff4d4d; border: none; color: white; padding: 5px 10px; border-radius: 4px; cursor: pointer;">X</button>
+                </div>
+                <p style="font-size: 14px; color: #ccc;">টুলটি সফলভাবে লাইসেন্স ভেরিফাই করে রান হয়েছে! ✅</p>
+            \`;
+
+            document.body.appendChild(container);
+
+            document.getElementById('close-tool-btn').onclick = function() {
+                container.style.display = 'none';
+            };
+        })();
+    `;
+
+    res.setHeader('Content-Type', 'application/javascript');
+    res.send(tradingEngineCode);
+};
